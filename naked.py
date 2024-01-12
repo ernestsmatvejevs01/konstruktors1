@@ -4,12 +4,14 @@ import logging.config
 import requests  # Lai veiktu HTTP pieprasījumus
 import json  # Darbam ar JSON datiem
 import datetime  # Datuma un laika apstrādei
+import mysql.connector
 import time  # Laika funkcijām
 import yaml  # Darbam ar YAML datiem
 import yaml
 
 from datetime import datetime  # 'datetime' klases importēšana no 'datetime' moduļa
 from configparser import ConfigParser
+from mysql.connector import Error
 
 # Loading logging configuration
 with open('./log_worker.yaml', 'r') as stream:
@@ -26,12 +28,89 @@ try:
     config = ConfigParser()
     config.read('config.ini')
 
-    nasa_api_key = config.get('nasa', 'api_key')
-    nasa_api_url = config.get('nasa', 'api_url')
-except:
+	    nasa_api_key = config.get('nasa', 'api_key')
+	    nasa_api_url = config.get('nasa', 'api_url')
+		
+		mysql_config_mysql_host = config.get('mysql_config', 'mysql_host')
+		mysql_config_mysql_db = config.get('mysql_config', 'mysql_db')
+		mysql_config_mysql_user = config.get('mysql_config', 'mysql_user')
+		mysql_config_mysql_pass = config.get('mysql_config', 'mysql_pass')
+
+	except:
     logger.exception('')
 print('DONE')
 # NASA tuvāko Zemes objektu tīmekļa servisa API atslēga un URL
+
+def init_db():
+	global connection
+	connection = mysql.connector.connect(host=mysql_config_mysql_host, database=mysql_config_mysql_db, user=mysql_config_mysql_user, password=mysql_config_mysql_pass)
+
+def get_cursor():
+	global connection
+	try:
+		connection.ping(reconnect=True, attempts=1, delay=0)
+		connection.commit()
+	except mysql.connector.Error as err:
+		logger.error("No connection to db " + str(err))
+		connection = init_db()
+		connection.commit()
+	return connection.cursor()
+
+# Check if asteroid exists in db
+def mysql_check_if_ast_exists_in_db(request_day, ast_id):
+	records = []
+	cursor = get_cursor()
+	try:
+		cursor = connection.cursor()
+		result  = cursor.execute("SELECT count(*) FROM ast_daily WHERE `create_date` = '" + str(request_day) + "' AND `ast_id` = '" + str(ast_id) + "'")
+		records = cursor.fetchall()
+		connection.commit()
+	except Error as e :
+		logger.error("SELECT count(*) FROM ast_daily WHERE `create_date` = '" + str(request_day) + "' AND `ast_id` = '" + str(ast_id) + "'")
+		logger.error('Problem checking if asteroid exists: ' + str(e))
+		pass
+	return records[0][0]
+
+# Asteroid value insert
+def mysql_insert_ast_into_db(create_date, hazardous, name, url, diam_min, diam_max, ts, dt_utc, dt_local, speed, distance, ast_id):
+	cursor = get_cursor()
+	try:
+		cursor = connection.cursor()
+		result  = cursor.execute( "INSERT INTO `ast_daily` (`create_date`, `hazardous`, `name`, `url`, `diam_min`, `diam_max`, `ts`, `dt_utc`, `dt_local`, `speed`, `distance`, `ast_id`) VALUES ('" + str(create_date) + "', '" + str(hazardous) + "', '" + str(name) + "', '" + str(url) + "', '" + str(diam_min) + "', '" + str(diam_max) + "', '" + str(ts) + "', '" + str(dt_utc) + "', '" + str(dt_local) + "', '" + str(speed) + "', '" + str(distance) + "', '" + str(ast_id) + "')")
+		connection.commit()
+	except Error as e :
+		logger.error( "INSERT INTO `ast_daily` (`create_date`, `hazardous`, `name`, `url`, `diam_min`, `diam_max`, `ts`, `dt_utc`, `dt_local`, `speed`, `distance`, `ast_id`) VALUES ('" + str(create_date) + "', '" + str(hazardous) + "', '" + str(name) + "', '" + str(url) + "', '" + str(diam_min) + "', '" + str(diam_max) + "', '" + str(ts) + "', '" + str(dt_utc) + "', '" + str(dt_local) + "', '" + str(speed) + "', '" + str(distance) + "', '" + str(ast_id) + "')")
+		logger.error('Problem inserting asteroid values into DB: ' + str(e))
+		pass
+
+def push_asteroids_arrays_to_db(request_day, ast_array, hazardous):
+	for asteroid in ast_array:
+		if mysql_check_if_ast_exists_in_db(request_day, asteroid[9]) == 0:
+			logger.debug("Asteroid NOT in db")
+			mysql_insert_ast_into_db(request_day, hazardous, asteroid[0], asteroid[1], asteroid[2], asteroid[3], asteroid[4], asteroid[5], asteroid[6], asteroid[7], asteroid[8], asteroid[9])
+		else:
+			logger.debug("Asteroid already IN DB")
+
+if __name__ == "__main__":
+	connection = None
+	connected = False
+
+	init_db()
+# Opening connection to mysql DB
+	logger.info('Connecting to MySQL DB')
+	try:
+		# connection = mysql.connector.connect(host=mysql_config_mysql_host, database=mysql_config_mysql_db, user=mysql_config_mysql_user, password=mysql_config_mysql_pass)
+		cursor = get_cursor()
+		if connection.is_connected():
+			db_Info = connection.get_server_info()
+			logger.info('Connected to MySQL database. MySQL Server version on ' + str(db_Info))
+			cursor = connection.cursor()
+			cursor.execute("select database();")
+			record = cursor.fetchone()
+			logger.debug('Your connected to - ' + str(record))
+			connection.commit()
+	except Error as e :
+		logger.error('Error while connecting to MySQL' + str(e))
 
 # Šodienas datuma iegūšana
 dt = datetime.now()
@@ -69,6 +148,9 @@ if r.status_code == 200:
 					# Izgūst asteroida informāciju
 					tmp_ast_name = val['name']
 					tmp_ast_nasa_jpl_url = val['nasa_jpl_url']
+
+					# Getting id of asteroid
+						tmp_ast_id = val['id']
 					# Izgūst aptuveno diametra informāciju
 					if 'kilometers' in val['estimated_diameter']:
 						if 'estimated_diameter_min' and 'estimated_diameter_max' in val['estimated_diameter']['kilometers']:
@@ -122,9 +204,9 @@ if r.status_code == 200:
 					
 					# Pievienot asteroida datus atbilstošajam sarakstam
 					if tmp_ast_hazardous == True:
-						ast_hazardous.append([tmp_ast_name, tmp_ast_nasa_jpl_url, tmp_ast_diam_min, tmp_ast_diam_max, tmp_ast_close_appr_ts, tmp_ast_close_appr_dt_utc, tmp_ast_close_appr_dt, tmp_ast_speed, tmp_ast_miss_dist])
+						ast_hazardous.append([tmp_ast_name, tmp_ast_nasa_jpl_url, tmp_ast_diam_min, tmp_ast_diam_max, tmp_ast_close_appr_ts, tmp_ast_close_appr_dt_utc, tmp_ast_close_appr_dt, tmp_ast_speed, tmp_ast_miss_dist,tmp_ast_id])
 					else:
-						ast_safe.append([tmp_ast_name, tmp_ast_nasa_jpl_url, tmp_ast_diam_min, tmp_ast_diam_max, tmp_ast_close_appr_ts, tmp_ast_close_appr_dt_utc, tmp_ast_close_appr_dt, tmp_ast_speed, tmp_ast_miss_dist])
+						ast_safe.append([tmp_ast_name, tmp_ast_nasa_jpl_url, tmp_ast_diam_min, tmp_ast_diam_max, tmp_ast_close_appr_ts, tmp_ast_close_appr_dt_utc, tmp_ast_close_appr_dt, tmp_ast_speed, tmp_ast_miss_dist,tmp_ast_id])
 
 		else:
 			logger.info("No asteroids are going to hit earth today")
@@ -143,8 +225,10 @@ if r.status_code == 200:
 		ast_hazardous.sort(key = lambda x: x[8], reverse=False)
 		 # Informācijas izvadīšana par bīstamo asteroīdu ar tuvāko pieeju attālumam
 		logger.info("Closest passing distance is for: " + str(ast_hazardous[0][0]) + " at: " + str(int(ast_hazardous[0][8])) + " km | more info: " + str(ast_hazardous[0][1]))
+		push_asteroids_arrays_to_db(request_date, ast_hazardous, 1)
 	else:
 		logger.info("No asteroids close passing earth today")
-
+		if len(ast_safe) > 0:
+		push_asteroids_arrays_to_db(request_date, ast_safe, 0)
 else:
 	logger.error("Unable to get response from API. Response code: " + str(r.status_code) + " | content: " + str(r.text))
