@@ -6,14 +6,22 @@ import time # Laika funkcijām
 import yaml # Darbam ar YAML datiem
 
 from datetime import datetime # 'datetime' klases importēšana no 'datetime' moduļa
+from configparser import ConfigParser
 # Ziņojums par programmas sākumu
 print('Asteroid processing service')
 
 print('Loading configuration from file')
+try:
+		config = ConfigParser()
+		config.read('config.ini')
+
+		nasa_api_key = config.get('nasa', 'api_key')
+		nasa_api_url = config.get('nasa', 'api_url')
+	except:
+		logger.exception('')
+	print('DONE')
 
 # NASA tuvāko Zemes objektu tīmekļa servisa API atslēga un URL
-nasa_api_key = "dXvQFkmw5w8vxLbT0cGYEoLuoswdGyCnMPA43Gfv"
-nasa_api_url = "https://api.nasa.gov/neo/"
 
 # Šodienas datuma iegūšana
 dt = datetime.now()
