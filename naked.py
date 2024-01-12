@@ -1,35 +1,35 @@
 # Importing necessary libraries/modules
 import logging
 import logging.config
-import requests # Lai veiktu HTTP pieprasījumus
-import json # Darbam ar JSON datiem
-import datetime # Datuma un laika apstrādei
-import time # Laika funkcijām
-import yaml # Darbam ar YAML datiem
+import requests  # Lai veiktu HTTP pieprasījumus
+import json  # Darbam ar JSON datiem
+import datetime  # Datuma un laika apstrādei
+import time  # Laika funkcijām
+import yaml  # Darbam ar YAML datiem
 
-from datetime import datetime # 'datetime' klases importēšana no 'datetime' moduļa
+from datetime import datetime  # 'datetime' klases importēšana no 'datetime' moduļa
 from configparser import ConfigParser
-# Loading logging configuration
-	with open('./log_worker.yaml', 'r') as stream:
-	    log_config = yaml.safe_load(stream)
-	logging.config.dictConfig(log_config)
-	# Creating logger
-	logger = logging.getLogger('root')
 
+# Loading logging configuration
+with open('./log_worker.yaml', 'r') as stream:
+    log_config = yaml.safe_load(stream)
+    logging.config.dictConfig(log_config)
+    # Creating logger
+    logger = logging.getLogger('root')
 
 # Ziņojums par programmas sākumu
 print('Asteroid processing service')
 
 print('Loading configuration from file')
 try:
-		config = ConfigParser()
-		config.read('config.ini')
+    config = ConfigParser()
+    config.read('config.ini')
 
-		nasa_api_key = config.get('nasa', 'api_key')
-		nasa_api_url = config.get('nasa', 'api_url')
-	except:
-		logger.exception('')
-	print('DONE')
+    nasa_api_key = config.get('nasa', 'api_key')
+    nasa_api_url = config.get('nasa', 'api_url')
+except:
+    logger.exception('')
+print('DONE')
 # NASA tuvāko Zemes objektu tīmekļa servisa API atslēga un URL
 
 # Šodienas datuma iegūšana
