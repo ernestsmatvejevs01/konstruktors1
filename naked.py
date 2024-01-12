@@ -6,6 +6,7 @@ import json  # Darbam ar JSON datiem
 import datetime  # Datuma un laika apstrādei
 import time  # Laika funkcijām
 import yaml  # Darbam ar YAML datiem
+import yaml
 
 from datetime import datetime  # 'datetime' klases importēšana no 'datetime' moduļa
 from configparser import ConfigParser
