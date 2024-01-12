@@ -24,7 +24,7 @@ print('Asteroid processing service')
 print('Loading configuration from file')
 try:
     config = ConfigParser()
-    config.read('config.ini.template')
+    config.read('config.ini')
 
     nasa_api_key = config.get('nasa', 'api_key')
     nasa_api_url = config.get('nasa', 'api_url')
